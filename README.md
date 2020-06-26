@@ -1,6 +1,6 @@
 # FiveInARowUsingJSAndSocketIO
 
-# This is a really simple FIVE IN A ROW game based on html/javascript. Please Read the README.txt inside diractory to see more details.  
+# This is a really simple FIVE IN A ROW game based on html/javascript. Please Read the README.txt inside the folder to see more details.  
 
 ## The game lobby includes a welcome board, a chat system, and the tables and seats.  
 <img src="usernameLogin.png">  
