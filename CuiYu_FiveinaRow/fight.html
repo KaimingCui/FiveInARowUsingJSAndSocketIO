@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>FightPage</title>
+    <script src="http://localhost:3000/socket.io/socket.io.js"></script>
+    <style type="text/css">
+        *{
+            margin:0;
+            padding:0;
+        }
+        .chess{
+            position: absolute;
+            top:0;
+            left:0;
+            width:75%;
+            height:100%;
+            background-color:lightgray;
+        }
+
+        .sidebar{
+            position:fixed;
+            top:0;
+            right:0;
+            width: 25%;
+            height:100%;
+        }
+        #info{
+            width: 100%;
+            height:20%;
+            background-color: lightblue;
+        }
+
+        .buttons{
+            width: 100%;
+            height: 30%;
+            background-color: lightgreen;
+        }
+
+        .chatarea{
+            width: 100%;
+            height: 50%;
+        }
+
+        .txtarea{
+            height:90%;
+            width:100%;
+        }
+
+        #typin{
+            height:10%;
+            width:100%;
+        }
+
+        #room_message{
+            width: 80%;
+            height: 90%;
+        }
+
+        #canvas {
+            /*background-color: #ffcc00;*/
+            margin-left: 165px;
+            margin-top: 25px;
+        }
+    </style>
+</head>
+<body>
+    <div class = "chess">
+        <canvas id = "canvas" width="595" height="595"></canvas>
+    </div>
+    <div class = 'sidebar'>
+        <div id = 'info'>
+<!--             <span>hello</span> -->
+        </div>
+        <div class = 'buttons'>
+            <div><button id="regret">Regret</button></div>
+            <div><button id="newGame">New Game</button></div>
+            <div><button id="goLobby">Go to Lobby</button></div>
+        </div>
+        <div class = "chatarea">
+            <textarea class = "txtarea" disabled="disabled" readonly="readonly"></textarea>
+            <div id="typein"><input id="room_message" type = "text"/> <button id="room_sendBtn">send</button></div>
+        </div>
+    </div>
+
+</body>
+<script type="text/javascript" src = "jslib/jquery-3.4.1.js"></script>
+<script type="text/javascript">
+    socketf = parent.socket;  //get the socket from parent html
+    var canvas = document.getElementById('canvas'); //canvas
+    var ctx = canvas.getContext('2d');
+
+    var width = 525;   //the width and height of chess board
+    var height = 525;
+    b_width = 595;   //the width and height of canvas
+    b_height = 595;
+    var rowCount = 16; //how many row and col, row == col
+    var colCount = rowCount; 
+    var cellwidth = width/(rowCount-1); //the size of one block
+    var r = cellwidth*0.4; //radius
+
+    //all pieces, should be same as the opponent's pieces array
+    pieces = new Array(rowCount);
+    // prepcs = new Array();
+
+    for(let i = 0; i < rowCount;i++){
+        pieces[i] = new Array(rowCount);
+        for(let j = 0; j < rowCount;j++){
+            temp_position = {
+                x:i+1,
+                y:j+1
+            }
+            pieces[i][j] = {
+                position:temp_position,
+                color:0  //0 non point, 1 black, 2 white
+            }
+        }
+    }
+
+    var pcs = function(playerid, x, y){
+          this.playerid =  playerid;
+          this.x = x;
+          this.y = y;
+        return this;
+    };
+
+    var prepcs = [];
+
+    // console.log(pieces);
+
+    //reset the youturn, player1 go first
+    function setTurn(){
+        if(parent.player.type == "player1"){
+            parent.yourturn = 1;
+        }else if(parent.player.type == "player2"){
+            parent.yourturn = 0;
+        }
+    }
+    setTurn();
+
+    //init pieces, set color to 0 means no piece on this position
+    function init_pieces(){
+        for(let i = 0; i < rowCount;i++){
+            for(let j = 0; j < rowCount;j++){
+                pieces[i][j].color = 0;
+            }
+        }
+    }
+
+    //function compare two pieces
+    // function comparePieces(p1,p2){
+    //     if(p1.position.x == p2.position.x && p1.position.y == p2.position.y){
+    //         return true;
+    //     }
+    //     else{
+    //         return false;
+    //     }
+    // }
+
+
+    function drawAllPieces(){
+        for(let i = 0; i < rowCount; i++){
+            for(let j = 0; j < rowCount; j++){
+                if(pieces[i][j].color != 0){
+                    if(pieces[i][j].color == 1){
+                        drawDot(pieces[i][j].position,'#000000');
+                    }else{
+                        drawDot(pieces[i][j].position,'#FFFFFF');
+                    }
+                }
+            }
+        }
+    }
+
+    //who wins
+    function victory(piece){
+        x = piece.position.x;
+        y = piece.position.y;
+        counter = 1; //must be 1, counte the piece itself
+        flag = false;
+         //right direction
+         var dx = [1, 1, 1, 0, 0, -1, -1, -1];
+         var dy = [1, 0, -1, 1, -1, 1, 0, -1];
+         for(let i = 0; i < 4; i++) {
+            var nx = x;
+            var ny = y;
+            var c = -1;
+            while(nx >= 1 && nx <= 16 && ny >= 1 && ny <= 16) {
+                if(pieces[nx - 1][ny - 1].color == piece.color) {
+                    c++;
+                    nx += dx[i];
+                    ny += dy[i];
+                } else {
+                    break;
+                }
+            }
+            nx = x;
+            ny = y;
+            while(nx >= 1 && nx <= 16 && ny >= 1 && ny <= 16) {
+                if(pieces[nx - 1][ny - 1].color == piece.color) {
+                    c++;
+                    nx += dx[7 - i];
+                    ny += dy[7 - i];
+                } else {
+                    break;
+                }
+            }
+            if(c == 5) {
+                flag = true;
+            }
+         }
+
+        //  if(!flag){
+        //     while(++x <= 16){
+        //         if(pieces[x-1][y-1].color == piece.color){
+        //             counter++;
+        //             if(counter == 5){
+        //                 flag = true;
+        //                 break;
+        //             }
+        //         }else{
+        //             break;
+        //         }
+        //     }            
+        //  }
+
+
+
+        // if(!flag){
+        //     x = piece.position.x;
+        //     y = piece.position.y;
+        //     counter = 1;
+        //     //left dir
+        //     while(--x >= 1){
+        //         if(pieces[x-1][y-1].color == piece.color){
+        //             counter++;
+        //             if(counter == 5){
+        //                 flag = true;
+        //                 break;
+        //             }
+        //         }else{
+        //             break;
+        //         }
+        //     }            
+        // }
+
+
+        // if(!flag){
+        //     x = piece.position.x;
+        //     y = piece.position.y;
+        //     counter = 1;
+        //     //upper dir
+        //     while(--y >= 1){
+        //         if(pieces[x-1][y-1].color == piece.color){
+        //             counter++;
+        //             if(counter == 5){
+        //                 flag = true;
+        //                 break;
+        //             }
+        //         }
+        //         else{
+        //             break;
+        //         }
+        //     }            
+        // }
+
+        // if(!flag){
+        //     x = piece.position.x;
+        //     y = piece.position.y;
+        //     counter = 1;
+        //     //down dir
+        //     while(++y <= 16){
+        //         if(pieces[x-1][y-1].color == piece.color){
+        //             counter++;
+        //             if(counter == 5){
+        //                 flag = true;
+        //                 break;
+        //             }
+        //         }
+        //         else{
+        //             break;
+        //         }
+        //     }
+        // }
+
+
+        // if(!flag){
+        //     x = piece.position.x;
+        //     y = piece.position.y;
+        //     counter = 1;
+        //     //upper forward slash \
+        //     while(--y >= 1 && --x >= 1){
+        //         if(pieces[x-1][y-1].color == piece.color){
+        //             counter++;
+        //             if(counter == 5){
+        //                 flag = true;
+        //                 break;
+        //             }
+        //         }
+        //         else{
+        //             break;
+        //         }
+        //     }        
+        // }
+
+        // //down forward slash \
+        // if(!flag){
+        //     x = piece.position.x;
+        //     y = piece.position.y;
+        //     counter = 1;
+
+        //     while(++x <= 16 && ++y <= 16){
+        //         if(pieces[x-1][y-1].color == piece.color){
+        //             counter++;
+        //             if(counter == 5){
+        //                 flag = true;
+        //                 break;
+        //             }
+        //         }
+        //         else{
+        //             break;
+        //         }
+        //     }
+        // }
+
+        // //upper back slash /
+        // if(!flag){
+        //     x = piece.position.x;
+        //     y = piece.position.y;
+        //     counter = 1;
+
+        //     while(++x <= 16 && --y >= 1){
+        //         if(pieces[x-1][y-1].color == piece.color){
+        //             counter++;
+        //             if(counter == 5){
+        //                 flag = true;
+        //                 break;
+        //             }
+        //         }
+        //         else{
+        //             break;
+        //         }
+        //     }
+        // } 
+
+        // //down back slash /
+        // if(!flag){
+        //     x = piece.position.x;
+        //     y = piece.position.y;
+        //     counter = 1;
+
+        //     while(--x >= 1 && --y >= 1){
+        //         if(pieces[x-1][y-1].color == piece.color){
+        //             counter++;
+        //             if(counter == 5){
+        //                 flag = true;
+        //                 break;
+        //             }
+        //         }
+        //         else{
+        //             break;
+        //         }
+        //     }
+        // }
+
+        //player1 black piece victory
+        if(flag && piece.color == 1){
+            return "player1";
+        }
+        else if(flag && piece.color == 2){
+            return "player2";
+        }
+        else{
+            return "continue";
+        }
+    
+    }
+    // console.log(comparePieces(pieces[0][0],pieces[0][0]));
+    // function showInfo(){
+    //     console.log('showinfo function call.');
+    //     str = "<div>" + parent.room.player1.name + "</div>" + 
+    //     "<div>VS</div><div>"+parent.room.player2.name + "</div>";
+    //     $('.info').html(str);
+    // }
+
+    //init canvas
+    function init_canvas(){
+        ctx.beginPath();
+        ctx.rect(0,0,595,595);
+        ctx.closePath();
+        ctx.fillStyle = "#cc9900";
+        // ctx.fillStyle = '#000000';
+        ctx.fill();
+
+        ctx.beginPath();
+        for(let i =0; i < rowCount;i++){
+            ctx.moveTo(0+cellwidth,(cellwidth*i)+cellwidth);
+            ctx.lineTo(width+cellwidth,(cellwidth*i)+cellwidth);
+        }
+        ctx.strokeStyle = '#000000';
+        ctx.stroke();
+
+        ctx.beginPath();
+        for(let i=0;i<colCount;i++){
+            ctx.moveTo((cellwidth*i)+cellwidth,0+cellwidth);
+            ctx.lineTo((cellwidth*i)+cellwidth,height+cellwidth);
+        }
+        ctx.strokeStyle = '#000000';
+        ctx.stroke();
+    }
+
+    init_canvas();  //function call to draw the canvas board
+
+    //draw one piece
+    function drawDot(position,color){
+        ctx.beginPath();
+        ctx.arc(position.x*cellwidth,position.y*cellwidth,r,0,2*Math.PI);
+        ctx.closePath();
+        ctx.fillStyle = color;
+        ctx.fill();
+    }
+
+    //click event on the canvas board
+    canvas.addEventListener("click",function(e){
+        offset = canvas.getBoundingClientRect();
+        // console.log(offset);
+        var xc = Math.round((e.clientX - offset.left)/cellwidth);
+        var yc = Math.round((e.clientY - offset.top)/cellwidth);
+        // console.log(xc);
+        // console.log(yc);
+        // xp = xc*cellwidth;
+        // yp = yc*cellwidth;
+        //rowcount
+
+        //check the position, if it is not in the chess board, do nothing
+        if(xc < 1 || yc < 1 || xc > 16 || yc > 16){
+            //donothing
+        }
+        else if(parent.yourturn == 0){
+            //if not your turn, wait for opponent
+            alert("It is not your turn.");
+        }
+        else if(pieces[xc-1][yc-1].color != 0){
+            //if this position already has a chess, cannnot add piece
+            alert("This position already has a chessman!");
+        }
+        else{
+
+            //what color you have, black or white
+            if(parent.player.type == "player1"){
+                pieces[xc-1][yc-1].color = 1;
+            }else{
+                 pieces[xc-1][yc-1].color = 2;
+            }
+
+            //tell server I want to add a piece
+            socketf.emit("gostep",pieces[xc-1][yc-1],parent.player);
+            // drawDot(position,'#000000');
+        }
+
+    });
+
+
+    //receive the event from server, update my pieces array and draw a point
+    socketf.on("update_draw_piece",function(data1,data2,data3){
+        console.log("hi");
+        console.log(parent.player);
+
+        //to see if this event is sent to me 
+        if(parent.player.roomId == data2){
+            target_piece = data1;
+            i = target_piece.position.x - 1;
+            j = target_piece.position.y - 1;
+            // console.log(i);
+            // console.log(j);
+            // console.log(pieces[i][j]);
+            pieces[i][j] = target_piece;
+            whoWin = victory(pieces[i][j]);
+            // console.log(whoWin);
+
+            //update turn
+            if(data3 == parent.player.type){
+                //I wentstep, now is opponent's turn.
+                parent.yourturn--;
+            }else{
+                //opponent wentstep, now is my turn.
+                parent.yourturn++;
+            }
+
+            //draw the piece
+            if(target_piece.color == 1){
+                drawDot(pieces[i][j].position,'#000000')
+            }
+            else if(target_piece.color == 2){
+                drawDot(pieces[i][j].position,'#FFFFFF')
+            }
+
+            //alert winner and loser,clear canvas, new game
+            if(whoWin != "continue"){
+                if(whoWin == parent.player.type){
+                    alert("You Win!");
+                }else{
+                    alert("You Lost!");
+                }
+                init_pieces();
+                ctx.clearRect(0,0,b_width,b_height);
+                init_canvas();
+                setTurn();
+            }
+            if(target_piece.color == 1) {
+                prepcs.push(new pcs("player1", i, j));
+            } else {
+                prepcs.push(new pcs("player2", i, j));
+            }
+            
+        }
+    });
+
+    socketf.on("no_against",function(){
+        alert("No againster, please wait for a player come in.");
+    })
+
+
+    //click go back to lobby button
+    $('#goLobby').on('click',function(){
+        // console.log(parent.room);
+        // console.log(parent.player);
+        //save player info and room info
+        player_type = parent.player.type;
+        roomid = parent.player.roomId;
+        //reset player and room
+        parent.player.roomId = -1;
+        parent.player.type="looking";
+        parent.room = parent.init_room;
+
+        //tell server I have left the room
+        socketf.emit("fight_finish",parent.player,roomid,player_type);
+        // console.log(parent.room);
+        // console.log(parent.player);
+
+        //init canvas and pieces, yourturn
+        init_pieces();
+        ctx.clearRect(0,0,b_width,b_height);
+        init_canvas();
+        parent.yourturn = -1;
+        // window.parent.reloadifr();
+
+
+        $('.lobby',window.parent.document).show();
+        $('.side_container',window.parent.document).show();
+        $('#ifr',window.parent.document).hide();
+    });
+
+    //click the new game button
+    $('#newGame').on('click',function(){
+        socketf.emit('newGame',parent.player);
+    });
+
+    $('#regret').on('click',function(){
+        if(prepcs.length == 0) {
+            alert("No moves yet.");
+        }
+        socketf.emit('regret',parent.player.roomId, prepcs[prepcs.length - 1].playerid, parent.player.type);
+    });
+
+    //receive new game event from server
+    socketf.on('newgame',function(data){
+        //is this event is sent to me
+        if(parent.player.roomId == data){
+            init_pieces();
+            ctx.clearRect(0,0,b_width,b_height);
+            init_canvas();
+            setTurn();
+        }
+    });
+
+    socketf.on('regret', function(roomId, numOfPcs){
+        if(roomId == parent.player.roomId) {
+            for(let i = 0; i < numOfPcs; i++) {
+                lastPiece = prepcs.pop();
+                pieces[lastPiece.x][lastPiece.y].color = 0;
+            }
+
+            if(numOfPcs == 1){
+                if(parent.yourturn == 1){
+                    parent.yourturn = 0;
+                }else{
+                    parent.yourturn = 1;
+                }
+            }
+        }
+
+        //init_pieces();
+        ctx.clearRect(0,0,b_width,b_height);
+        init_canvas();
+        drawAllPieces();
+    });
+
+    //chat system for this room
+    $('#room_sendBtn').click(function(){
+        var txt = parent.player.name + ":" + document.getElementById("room_message").value;
+        if(txt){
+            socketf.emit('rmessage',txt,parent.player);
+        }
+    });
+
+    //show the message on chat board
+    socketf.on('mes_to_room',function(data1,data2){
+        if(data2 == parent.room.id){
+            $(".txtarea").append(data1);
+            $(".txtarea").append('\n');
+        }
+    })
+
+    //occur when the opponent run away
+    socketf.on('escape',function(data){
+        if(parent.player.roomId == data){
+            init_pieces();
+            ctx.clearRect(0,0,b_width,b_height);
+            init_canvas();
+            setTurn();
+            alert("Your opponent ran away!");
+        }
+    })
+    // socketf.on('responde',function(){
+    //     // console.log(parent.room);
+    //     // console.log(parent.player);
+    // });
+
+</script>
+</html>

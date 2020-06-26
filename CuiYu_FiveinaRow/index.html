@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>FiveinaRow</title>
+    <script src="http://192.168.1.78:3000/socket.io/socket.io.js"></script>
+    <style type="text/css">
+        *{
+            padding:0;
+            margin:0;
+        }
+
+        .lobby{
+            position:absolute;
+            top:0;
+            left:0;
+            width:70%;
+            height:100%;
+            background-color:lightgray;
+        }
+
+        .side_container{
+            position:fixed;
+            right:0;
+            top:0;
+            width:30%;
+            height:100%;
+/*            background-color:lightyellow;*/
+        }
+
+
+        .welcome{
+            height:25%;
+            width: 100%;
+            background-color: lightgreen;
+        }
+
+        .news{
+            height:75%;
+            width: 100%;
+/*            background-color:lightgray;*/
+        }
+
+        .newsarea{
+            height:90%;
+            width:100%
+        }
+
+
+        #typecontainer{
+            height:10%;
+            width:100%;
+        }
+
+        #message{
+            width: 80%;
+            height: 90%;
+        }
+
+        .welcome_font{
+            font-weight: bold;
+            font-size: 40px;
+        }
+
+        .room{
+            width: 240px;
+            float: left;
+            height: 100px;
+            line-height: 100px;
+            border: 1px solid #e73480;
+            margin: 10px 10px;
+            display: flex;
+        }
+            
+        .left_seat,.right_seat{
+            background-color: lightblue;
+            flex: 1;
+            width:80px;
+            text-align: center;
+            height: 100%;
+        }
+
+        .table{
+            background-color: red;
+            flex: 1;
+            width: 80px;
+            height: 100%;
+            text-align: center;
+        }
+
+        #ifr{
+            position:absolute;
+            top:0;
+            border: none;
+            display:none;
+        }
+    </style>
+</head>
+<body>
+    <div class = "lobby">
+        
+
+    </div>
+    <div class = "side_container">
+        <div class = "welcome">
+
+        </div>
+        <div class = "news">
+            <textarea class = "newsarea" disabled="disabled" readonly="readonly"></textarea>
+            <div id="typecontainer"><input id="message" type = "text"/> <button id="sendBtn">send</button></div>
+        </div>
+    </div>
+    <iframe id="ifr" src="fight.html" width="100%" height="100%" scrolling="no" name='fight'></iframe>
+</body>
+<script type="text/javascript" src = "jslib/jquery-3.4.1.js"></script>
+<script type="text/javascript">
+    var player = {name:"",roomId:-1,type:"looking"}; //the player represents this client, -1 means not in a room right now
+    var non_player = {name:"",roomId:-1,type:"looking"};  //used to init player
+    var room = {id:-2,player1:non_player,player2:non_player}; //the room this client in, -2 means not in a room right now
+    var init_room = {id:-2,player1:non_player,player2:non_player}; //used to init room
+    var against_player = {name:"",roomId:-1,type:"looking"}; //not used
+    var roomlist = [];  //a list that contains all the rooms and their status
+    var frm = document.getElementById('ifr');  //get iframe tag
+    var frmdoc = frm.contentDocument || frm.contentWindow.document;
+    var yourturn = -1; //1 can gostep, 0 cannot
+    var pieces = []; //the pieces
+
+    var IPaddress = "192.168.1.78";
+
+    // var f = document.getElementById('ifr');
+    // var fdoc = f.contentDocument?f.contentDocument:f.contentWindow.document;
+    // var roomsdiv = [];
+    $('#ifr').hide();  //hide the iframe page
+    function getbyId(id){
+        return typeof(id) === "string"?document.getElementById(id):id;
+    }   
+
+    function getbyClass(className){
+        return document.getElementsByClassName(className);
+    }
+
+
+    //show rooms and players in each room
+    function init_rooms(rooms){
+        roomlist = rooms;
+        var str = "";
+        for(let i = 0; i < rooms.length;i++){
+            str += '<div class="room" roomid='+rooms[i].id+'>'+
+            '<div class="left_seat">'+rooms[i].player1.name+'</div>'+
+            '<div class="table">room'+rooms[i].id+'</div>'+
+            '<div class="right_seat">'+ rooms[i].player2.name+ '</div>'+
+            '</div>';
+        }
+
+        $('.lobby').html(str);
+        // getbyClass('lobby').innerHTML = str;
+        // roomsdiv = $('.room');
+
+        //click event for all left seats
+        left_seat = $('.left_seat');
+        for(let i = 0;i<left_seat.length;i++){
+            left_seat[i].onclick = function(){
+                console.log(roomlist);
+                if(player.type != "looking"){
+                    alert("You already in a game, please finish or close that game first.");
+                }
+                else if(roomlist[i].player1.name != ""){
+                    alert("This seat is already taken.");
+                }
+                else{
+                    // var getTimestamp=new Date().getTime();
+                    // $('#ifr').attr('src','fight.html?timestamp=' + getTimestamp);
+                    player.roomId = roomlist[i].id;  //update the player roomID and type
+                    player.type = "player1";
+                    yourturn = 1;  //init turn
+                    // console.log(player);
+                    // rooms[i].player1 = player;
+                    socket.emit('seat_down',player);  //tell server to update rooms
+                    // console.log("hello");
+                    $(left_seat[i]).text(player.name);  //show the player on this seat
+                    // console.log(player);
+                    $('.lobby').hide();
+                    $('.side_container').hide()
+                    $("#ifr").show();
+                }
+            }
+        }
+
+        //click event for all right seats
+        right_seat = $('.right_seat');
+        for(let i = 0;i<right_seat.length;i++){
+            right_seat[i].onclick = function(){
+                // console.log(roomlist);
+                if(player.type != "looking"){
+                    alert("You already in a game, please finish or close that game first.");
+                }
+                else if(roomlist[i].player2.name != ""){
+                    alert("This seat is already taken");
+                }
+                else{
+                    // var getTimestamp=new Date().getTime();
+                    // $('#ifr').attr('src','fight.html?timestamp=' + getTimestamp);
+                    player.roomId = roomlist[i].id;  //update the player roomID and type
+                    player.type = "player2";
+                    yourturn = 0;
+                    // console.log(player);
+                    // console.log("hello");
+                    // rooms[i].player2 = player;
+                    socket.emit('seat_down',player);
+                    $(right_seat[i]).text(player.name);
+                    // console.log(player);
+                    $('.lobby').hide();
+                    $('.side_container').hide();
+                    $("#ifr").show();
+                }
+            }
+        }
+    }
+    
+    // if(sessionStorage.getItem("user")){
+    //     player = JSON.parse(sessionStorage.getItem("user"));
+    // }
+
+    while(player.name == "" || player.name == null){
+        player.name = window.prompt("please enter a nickname","nickname");
+    }
+
+    //create socket
+    var socket = io.connect("http://" + IPaddress + ":3000");
+    socket.on('connect',function(){
+        socket.emit('player',player);
+        //send the player to server. 这个时候player里面只有username
+    });
+    // socket.emit('player',player);
+
+    //cannot have two players have same name
+    socket.on('same_name',function(msg){
+        player.name = window.prompt(msg,"nickname");
+        while(player.name == "" || player.name == null){
+            player.name = window.prompt("please enter a nickname","nickname");
+        }
+        socket.emit('player',player);
+    });
+
+    //show the welcome info of page
+    socket.on('welcome',function(data){
+        var str = '<span class = "welcome_font">Welcome, ' + data.name + '</span>';
+        $('.welcome').html(str);
+    });
+
+    //the new player come in message show in the chat system of lobby
+    socket.on('new_player',function(data){
+        var new_player = data;
+        $('.newsarea').append(new_player.name + " comes in.");
+        $('.newsarea').append('\n');
+        getbyClass('newsarea').scrollTop = getbyClass('newsarea').scrollHeight;
+    });
+
+    //a player left message show in the chat system of lobby
+    socket.on("leave",function(data){
+        var leave_player = data;
+        $('.newsarea').append(leave_player.name + " left.");
+        $('.newsarea').append('\n');
+        getbyClass('newsarea').scrollTop = getbyClass('newsarea').scrollHeight;
+    });
+
+    //send the message to server
+    $('#sendBtn').click(function(){
+        var txt = getbyId("message").value;
+        if(txt){
+            socket.emit('message',txt);
+        }
+    });
+
+    //show the message on chat system of lobby
+    socket.on("message",function(str){
+        $('.newsarea').append(str);
+        $('.newsarea').append('\n');
+        getbyClass('newsarea').scrollTop = getbyClass('newsarea').scrollHeight;
+    });
+
+    //get the room info from server hat this client entered so that this client will know its opponent
+    socket.on('rooms',function(rooms){
+        init_rooms(rooms);
+    });
+
+    //show player VS player2 in the fight html
+    function showinfo(){
+        str = "<div><span>" + room.player1.name + "</span></div>" + 
+        "<div><span>VS</span></div><div><span>"+room.player2.name + "</span></div>";
+         // fdoc.getElementById('info').innerHTML = str;
+         // $(document.getElementById('ifr').contentWindow.document.body).html(str)
+        $('#ifr').contents().find('#info').html(str);
+        // reloadifr();
+    }
+
+    //when a room changed on the server, server will tell all clients to update the clients itself room list
+    socket.on('update_room',function(data){
+        // console.log("121");
+        var target_room = data;
+        if(target_room.id == player.roomId){
+            room = target_room;
+            showinfo();
+        }
+        for(let i = 0; i < roomlist.length;i++){
+            if(roomlist[i].id == target_room.id){
+                roomlist[i] = target_room;
+            }
+        }
+        filter = "div[roomid=" + target_room.id + "]";
+        // console.log(filter);
+        $(filter).children("div.left_seat").text(target_room.player1.name);
+        $(filter).children("div.right_seat").text(target_room.player2.name);
+    });
+
+    function reloadifr(){
+        document.getElementById('ifr').contentWindow.location.reload();
+    }
+    // iframe = document.getElementById('ifr');
+    // iframe.onload = function(){
+    //     var iloc = iframe.contentWindow.location;
+    //     setTimeout(function(){
+    //         iloc.refresh();
+    //     },3000)
+    // }
+    // socket.on("your_room",function(data){
+    //     room = data;
+    // });
+
+    socket.on('error',function(error){
+        // console.log(error);
+    });
+
+    socket.on('disconnect',function(){
+        alert("Server Stopped.");
+    });
+
+</script>
+</html>
